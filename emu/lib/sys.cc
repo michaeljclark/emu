@@ -599,6 +599,58 @@ error:
     return -1;
 }
 
+int emu_set_vmcall(emu_cpu *cpu, emu_vmcall_fn fn, void *ctx)
+{
+    cpu->vmcall_fn = fn;
+    cpu->vmcall_ctx = ctx;
+    return 0;
+}
+
+int emu_get_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values)
+{
+    WHV_REGISTER_NAME *reg_names = (WHV_REGISTER_NAME*)
+        alloca(sizeof(WHV_REGISTER_NAME) * count);
+    WHV_REGISTER_VALUE *reg_values = (WHV_REGISTER_VALUE*)
+        alloca(sizeof(WHV_REGISTER_VALUE) * count);
+
+    for (size_t i = 0; i < count; i++) {
+        reg_names[i] = (WHV_REGISTER_NAME)((uint)WHvX64RegisterRax + regs[i]);
+    }
+
+    CHECK_HRESULT(WHvGetVirtualProcessorRegisters(cpu->sys->part, cpu->vpi,
+        reg_names, count, reg_values));
+
+    for (uint i = 0; i < count; i++) {
+        values[i] = reg_values[i].Reg64;
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
+int emu_set_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values)
+{
+    WHV_REGISTER_NAME *reg_names = (WHV_REGISTER_NAME*)
+        alloca(sizeof(WHV_REGISTER_NAME) * count);
+    WHV_REGISTER_VALUE *reg_values = (WHV_REGISTER_VALUE*)
+        alloca(sizeof(WHV_REGISTER_VALUE) * count);
+
+    for (uint i = 0; i < count; i++) {
+        reg_names[i] = (WHV_REGISTER_NAME)((uint)WHvX64RegisterRax + regs[i]);
+        reg_values[0].Reg64 = values[i];
+    }
+
+    CHECK_HRESULT(WHvSetVirtualProcessorRegisters(cpu->sys->part, cpu->vpi,
+        reg_names, count, reg_values));
+
+    return 0;
+
+error:
+    return -1;
+}
+
 int emu_mmio(emu_cpu *cpu)
 {
     WHV_RUN_VP_EXIT_CONTEXT *exit = &cpu->exit;
@@ -738,6 +790,80 @@ error:
     return -1;
 }
 
+static inline const char* x86_exception_str(int exception)
+{
+    switch (exception) {
+    case x86_exception_divide: return "divide";
+    case x86_exception_debug: return "debug";
+    case x86_exception_nmi: return "nmi";
+    case x86_exception_breakpoint: return "breakpoint";
+    case x86_exception_overflow:return "overflow";
+    case x86_exception_bound_range: return "bound_range";
+    case x86_exception_invalid_opcode: return "invalid_opcode";
+    case x86_exception_fpu_unavail: return "fpu_unavail";
+    case x86_exception_double_fault: return "double_fault";
+    case x86_exception_fpu_reserved: return "fpu_reserved";
+    case x86_exception_invalid_tss: return "invalid_tss";
+    case x86_exception_segment_fault: return "segment_fault";
+    case x86_exception_stack_fault: return "stack_fault";
+    case x86_exception_general_prot: return "general_prot";
+    case x86_exception_page_fault: return "page_fault";
+    case x86_exception_reserved: return "reserved";
+    case x86_exception_math_fault: return "math_fault";
+    case x86_exception_align_check: return "align_check";
+    case x86_exception_machine_check: return "machine_check";
+    case x86_exception_simd_fault: return "simd_fault";
+    case x86_exception_ept_exception: return "ept_exception";
+    case x86_exception_cet_exception: return "cet_exception";
+    default: return "unknown";
+    }
+}
+
+int emu_exception(emu_cpu *cpu)
+{
+    WHV_RUN_VP_EXIT_CONTEXT *exit = &cpu->exit;
+    WHV_REGISTER_NAME reg_names[1] = {
+        WHvX64RegisterRip
+    };
+    WHV_REGISTER_VALUE reg_values[1];
+
+    uchar *insn = exit->VpException.InstructionBytes;
+    uint insn_len = exit->VpException.InstructionByteCount;
+    uint step_len = 0;
+
+    emu_debugf("emu_exception: type=%s code=%d parameter=%lld\n",
+        x86_exception_str(exit->VpException.ExceptionType),
+        exit->VpException.ErrorCode,
+        exit->VpException.ExceptionParameter);
+
+    switch (exit->VpException.ExceptionType) {
+    case x86_exception_debug:
+    case x86_exception_breakpoint:
+        break;
+    case x86_exception_invalid_opcode:
+        // Intel vmcall (0f 01 c1), AMD vmmcall (0f 01 d9)
+        if (insn_len >= 3 && insn[0] == 0x0f && insn[1] == 0x01 &&
+            (insn[2] == 0xc1 || insn[2] == 0xd9)) {
+            step_len = 3;
+            cpu->vmcall_fn(cpu, cpu->vmcall_ctx);
+        }
+        break;
+    }
+
+    if (step_len > 0) {
+        reg_values[0].Reg64 = exit->VpContext.Rip + step_len;
+        CHECK_HRESULT(WHvSetVirtualProcessorRegisters(cpu->sys->part, cpu->vpi,
+            reg_names, array_size(reg_names), reg_values));
+    } else {
+        emu_halt(cpu->sys);
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
 int emu_create_sys(emu_system **sysp, ullong mem_size)
 {
     WHV_PARTITION_PROPERTY prop;
@@ -767,9 +893,18 @@ int emu_create_sys(emu_system **sysp, ullong mem_size)
     memset(&prop, 0, sizeof(prop));
     prop.ExtendedVmExits.X64CpuidExit = 1;
     prop.ExtendedVmExits.X64MsrExit = 1;
+    prop.ExtendedVmExits.ExceptionExit  = 1;
 
     CHECK_HRESULT(WHvSetPartitionProperty(sys->part,
         WHvPartitionPropertyCodeExtendedVmExits, &prop, sizeof(prop)));
+
+    memset(&prop, 0, sizeof(prop));
+    prop.ExceptionExitBitmap = (1LL << WHvX64ExceptionTypeDebugTrapOrFault)
+                             | (1LL << WHvX64ExceptionTypeBreakpointTrap)
+                             | (1LL << WHvX64ExceptionTypeInvalidOpcodeFault);
+
+    CHECK_HRESULT(WHvSetPartitionProperty(sys->part,
+        WHvPartitionPropertyCodeExceptionExitBitmap,  &prop, sizeof(prop)));
 
     memset(&prop, 0, sizeof(prop));
     prop.X64MsrExitBitmap.UnhandledMsrs = 1;
@@ -900,6 +1035,14 @@ int emu_launch(emu_cpu *cpu)
         CHECK_ERROR(emu_cpuid(cpu)); break;
     case WHvRunVpExitReasonX64MsrAccess:
         CHECK_ERROR(emu_msr(cpu)); break;
+    case WHvRunVpExitReasonException:
+        CHECK_ERROR(emu_exception(cpu)); break;
+    case WHvRunVpExitReasonUnrecoverableException:
+    case WHvRunVpExitReasonInvalidVpRegisterValue:
+    case WHvRunVpExitReasonUnsupportedFeature:
+    case WHvRunVpExitReasonX64InterruptWindow:
+    case WHvRunVpExitReasonX64Halt:
+    case WHvRunVpExitReasonX64ApicEoi:
     default:
         cpu->running = false;
         break;

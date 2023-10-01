@@ -13,6 +13,7 @@
 
 #include "x86_msr.h"
 #include "x86_mmu.h"
+#include "x86_exception.h"
 
 #define array_size(arr) (sizeof(arr) / sizeof(arr[0]))
 
@@ -102,6 +103,8 @@ struct emu_system
         mem_size(mem_size), mem(nullptr), cpulist(), devlist(), part() {}
 };
 
+typedef int (*emu_vmcall_fn)(emu_cpu *cpu, void *ctx);
+
 struct emu_cpu
 {
     emu_system *sys;
@@ -111,9 +114,12 @@ struct emu_cpu
     WHV_EMULATOR_STATUS status;
     WHV_EMULATOR_CALLBACKS eemu_cb;
     WHV_RUN_VP_EXIT_CONTEXT exit;
+    emu_vmcall_fn vmcall_fn;
+    void *vmcall_ctx;
 
     emu_cpu(emu_system *sys, int vpi, bool running) :
-        sys(sys), vpi(vpi), running(running), emu(), eemu_cb(), exit() {}
+        sys(sys), vpi(vpi), running(running), emu(), eemu_cb(), exit(),
+        vmcall_fn(), vmcall_ctx() {}
 };
 
 extern emu_device_class emu_uart;
@@ -141,6 +147,9 @@ int emu_init();
 int emu_load(emu_system *sys, const char *filename);
 int emu_dump_mem(emu_system *sys, ullong offset, ullong len);
 int emu_dump_regs(emu_cpu *cpu);
+int emu_set_vmcall(emu_cpu *cpu, emu_vmcall_fn fn, void *ctx);
+int emu_get_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values);
+int emu_set_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values);
 int emu_create_sys(emu_system **sys, ullong meemu_size);
 int emu_create_cpu(emu_cpu **cpu, emu_system *sys, int vpi);
 int emu_halt(emu_system *sys);
