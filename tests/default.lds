@@ -2,11 +2,17 @@ OUTPUT_ARCH( "i386:x86-64" )
 
 ENTRY( reset )
 
+MEMORY
+{
+  bootmem (rwx) : ORIGIN = 0, LENGTH = 1048576
+}
+
 PHDRS
 {
   init PT_LOAD;
   text PT_LOAD;
   data PT_LOAD;
+  bss PT_LOAD;
 }
 
 SECTIONS
@@ -41,5 +47,9 @@ SECTIONS
     PROVIDE(_bss_end = .);
   } :data
 
-  PROVIDE(_bss_length = SIZEOF(.bss));
+  .memory : ALIGN(4096) {
+    PROVIDE(_memory_start = .);
+    . = ORIGIN(bootmem) + LENGTH(bootmem);
+    PROVIDE(_memory_end = .);
+  } :data
 }

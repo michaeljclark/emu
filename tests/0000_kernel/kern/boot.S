@@ -84,7 +84,8 @@ start64:
   # zero bss
   xor %eax, %eax
   mov $_bss_start, %rdi
-  mov $_bss_length, %rcx
+  mov $_bss_end, %rcx
+  sub %rdi, %rcx
   rep stosb
 
   # set stack pointer and call start_c.
