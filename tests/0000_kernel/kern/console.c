@@ -1,10 +1,5 @@
 #include "console.h"
 
-int putchar(int ch)
-{
-    return console_dev->putchar(ch);
-}
-
 void register_console(console_device_t *dev)
 {
     console_dev = dev;
