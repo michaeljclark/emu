@@ -45,7 +45,7 @@ int main()
     emu_register_device_class(&test_mmio_dev);
     CHECK_ERROR(emu_create_device(&mmio, sys, "test_mmio", nullptr));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));
-    CHECK_ERROR(emu_load(sys, "build/out/x86/tests/0005_mmio/system.elf"));
+    CHECK_ERROR(emu_load(sys, "build/out/x86/guest/tests/0005_mmio/system.elf"));
     while (emu_running(cpu)) emu_launch(cpu);
     CHECK_ERROR(emu_destroy_cpu(cpu));
     CHECK_ERROR(emu_destroy_sys(sys));

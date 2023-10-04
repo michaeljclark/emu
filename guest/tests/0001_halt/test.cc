@@ -12,7 +12,7 @@ int main()
 {
     emu_system *sys;
     emu_cpu *cpu;
-    emu_device *rcr, *uart;
+    emu_device *rcr;
 
     llong mem_size = 1024 * 1024;
 
@@ -20,8 +20,7 @@ int main()
     CHECK_ERROR(emu_create_sys(&sys, mem_size));
     CHECK_ERROR(emu_create_cpu(&cpu, sys, 0));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));
-    CHECK_ERROR(emu_create_device(&uart, sys, "uart", nullptr));
-    CHECK_ERROR(emu_load(sys, "build/out/x86/tests/0003_uart/system.elf"));
+    CHECK_ERROR(emu_load(sys, "build/out/x86/guest/tests/0001_halt/system.elf"));
     while (emu_running(cpu)) emu_launch(cpu);
     CHECK_ERROR(emu_destroy_cpu(cpu));
     CHECK_ERROR(emu_destroy_sys(sys));
