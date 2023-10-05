@@ -9,6 +9,7 @@
 #include "elf.h"
 #include "utf8.h"
 #include "types.h"
+#include "mem.h"
 #include "log.h"
 
 #include "x86_msr.h"
@@ -97,6 +98,7 @@ struct emu_system
     void* mem;
     std::vector<emu_cpu*> cpulist;
     std::vector<emu_device*> devlist;
+    std::vector<emu_mem_desc> memlist;
     WHV_PARTITION_HANDLE part;
 
     emu_system(ullong mem_size) :
@@ -142,6 +144,13 @@ int emu_map_io(emu_io **iop, emu_device *dev, emu_io_type iotype,
 int emu_find_io(emu_io **iop, emu_system *sys, emu_io_type iotype,
     ullong addr, ullong size);
 int emu_unmap_io(emu_io *io);
+
+void *emu_virtaddr(emu_system *sys, emu_phys_addr pa);
+void emu_copy_in(emu_system *sys, emu_phys_addr dst_pa, void *src, ullong n);
+void emu_copy_out(emu_system *sys, void *dst, emu_phys_addr src_pa, ullong n);
+int emu_query_mem(emu_system *sys, ullong *count, emu_mem_desc *memdesc);
+int emu_map_mem(emu_system *sys, emu_mem_desc memdesc);
+int emu_vmcall(emu_cpu *cpu, void *ctx);
 
 int emu_init();
 int emu_load(emu_system *sys, const char *filename);

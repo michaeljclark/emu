@@ -2,7 +2,7 @@
 #include "x86_intrin.h"
 #include "poweroff.h"
 
-void cf9_poweroff(int rc)
+void cf9_poweroff(llong rc)
 {
     x86_outw(0xcf9, 0x800);
 }

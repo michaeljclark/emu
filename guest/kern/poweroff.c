@@ -1,6 +1,6 @@
 #include "poweroff.h"
 
-void poweroff_halt(int rc)
+void poweroff_halt(llong rc)
 {
     poweroff_dev->poweroff(rc);
 }
@@ -13,7 +13,7 @@ void register_poweroff(poweroff_device_t *dev)
     }
 }
 
-static void default_poweroff(int status)
+static void default_poweroff(llong status)
 {
     asm volatile("ud2");
     while (1) {

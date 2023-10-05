@@ -9,6 +9,8 @@
  * PTE      - Bits 51:12 are from the PTE    47:12; offset[11:3] are va[11:3]
  */
 
+#define PAGE_SIZE 4096
+#define PAGE_MASK 4095
 #define PAGE_SHIFT 12
 
 #define PTE_P   (1 << 0) /* Present */

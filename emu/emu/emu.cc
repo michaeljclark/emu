@@ -95,6 +95,7 @@ static int emu_run(int argc, char **arg)
     CHECK_ERROR(emu_create_device(&a20, sys, "a20", nullptr));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));
     CHECK_ERROR(emu_create_device(&uart, sys, "uart", nullptr));
+    CHECK_ERROR(emu_set_vmcall(cpu, emu_vmcall, nullptr));
     CHECK_ERROR(emu_load(sys, opt_kernel));
     while (emu_running(cpu)) emu_launch(cpu);
     if (opt_dump_reg) CHECK_ERROR(emu_dump_regs(cpu));

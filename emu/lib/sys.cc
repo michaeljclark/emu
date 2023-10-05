@@ -10,6 +10,7 @@
 
 #include "sys.h"
 #include "uart.h"
+#include "vmcall.h"
 
 #include <map>
 #include <vector>
@@ -264,6 +265,111 @@ int emu_unmap_io(emu_io *io)
     return 0;
 }
 
+void *emu_virtaddr(emu_system *sys, emu_phys_addr pa)
+{
+    return (uchar*)sys->mem + pa;
+}
+
+void emu_copy_in(emu_system *sys, emu_phys_addr dst_pa, void *src, ullong n)
+{
+    uchar *dst = (uchar*)emu_virtaddr(sys, dst_pa);
+    if (dst >= (uchar*)sys->mem && dst < ((uchar*)sys->mem + sys->mem_size)) {
+        memcpy(dst, src, n);
+    }
+}
+
+void emu_copy_out(emu_system *sys, void *dst, emu_phys_addr src_pa, ullong n)
+{
+    uchar *src = (uchar*)emu_virtaddr(sys, src_pa);
+    if (src >= (uchar*)sys->mem && src < ((uchar*)sys->mem + sys->mem_size)) {
+        memcpy(dst, src, n);
+    }
+}
+
+int emu_query_mem(emu_system *sys, ullong *count, emu_mem_desc *memdesc)
+{
+    ullong incount = 0, outcount = 0;
+    if (count) {
+        incount = *count;
+        *count =sys->memlist.size();
+    }
+    if (memdesc) {
+        ullong i = 0;
+        for (auto desc : sys->memlist) {
+            if (i >= incount) break;
+            else memdesc[i++] = desc;
+        }
+    }
+    return 0;
+}
+
+int emu_map_mem(emu_system *sys, emu_mem_desc memdesc)
+{
+    // trim intersection on first pass
+    ullong a1 = memdesc.phys_start;
+    ullong a2 = memdesc.phys_start + memdesc.length;
+    for (auto i = sys->memlist.begin(); i != sys->memlist.end(); ) {
+        ullong b1 = i->phys_start;
+        ullong b2 = i->phys_start + i->length;
+        if (a1 <= b2 && a2 >= b1) {
+            if (a1 <= b1 && a2 >= b2) {
+                i = sys->memlist.erase(i);
+            } else if (a1 < b2) {
+                i->phys_start = a2;
+                i->length = b2 - a2;
+                i++;
+            } else if (a2 > b1) {
+                i->length = a1 - b1;
+                i++;
+            }
+        } else {
+            i++;
+        }
+    }
+
+    // insert the record
+    auto i = std::find_if(sys->memlist.begin(), sys->memlist.end(),
+        [&] (const emu_mem_desc &desc) {
+            return memdesc.phys_start + memdesc.length <= desc.phys_start; });
+    sys->memlist.insert(i, memdesc);
+
+    return 0;
+}
+
+int emu_vmcall(emu_cpu *cpu, void *ctx)
+{
+    uint regs[7] = {
+        0 /* RAX */,
+        7 /* RDI */, 6 /* RSI */, 2 /* RDX */,
+        1 /* RCX */, 8 /* R8  */, 9 /* R9  */
+    };
+    ullong values[7] = { 0 };
+    llong result = -1;
+
+    emu_get_regs(cpu, regs, 7, values);
+    ullong vmcall_nr = values[0];
+    switch (vmcall_nr) {
+    case vmcall_poweroff:
+        emu_debugf("emu_vmcall: poweroff code=%lld\n", values[1]);
+        emu_halt(cpu->sys);
+        break;
+    case vmcall_query_mem:
+        emu_debugf("emu_vmcall: query_mem count=0x%llx memdesc=0x%llx\n",
+            values[1], values[2]);
+        result = emu_query_mem(cpu->sys,
+            (ullong*)emu_virtaddr(cpu->sys, values[1]),
+            (emu_mem_desc*)emu_virtaddr(cpu->sys, values[2]));
+        break;
+    default:
+        emu_debugf("emu_vmcall: unknown\n");
+        break;
+    }
+    values[0] = result;
+    emu_set_regs(cpu, regs, 1, values);
+
+    return 0;
+}
+
 static HRESULT CALLBACK emu_ioport_emu(_In_ VOID * Context,
     _Inout_ WHV_EMULATOR_IO_ACCESS_INFO *IoAccess)
 {
@@ -386,6 +492,21 @@ static const char* flags_str(int flags)
     return "";
 }
 
+static const uint flags_attr(int flags)
+{
+    switch (flags & 7) {
+    case 1: return emu_mem_attr_x;
+    case 2: return emu_mem_attr_w;
+    case 3: return emu_mem_attr_wx;
+    case 4: return emu_mem_attr_r;
+    case 5: return emu_mem_attr_rx;
+    case 6: return emu_mem_attr_rw;
+    case 7: return emu_mem_attr_rwx;
+    default: break;
+    }
+    return emu_mem_attr_none;
+}
+
 int emu_init()
 {
     emu_debugf("emu_init: emu: version %d.%d\n", 0, 1);
@@ -490,6 +611,26 @@ int emu_load(emu_system *sys, const char *filename)
             memcpy((uchar*)sys->mem + phdr.p_vaddr,
                 (uchar*)addr + phdr.p_offset, phdr.p_filesz);
             //emu_dump_mem(sys, phdr.p_vaddr, phdr.p_filesz);
+            ullong phys_addr = phdr.p_vaddr & ~PAGE_MASK;
+            ullong phys_len = ((phdr.p_vaddr + phdr.p_filesz + PAGE_MASK)
+                & ~(PAGE_MASK)) - phys_addr;
+            switch (flags_attr(phdr.p_flags)) {
+            case emu_mem_attr_w:
+            case emu_mem_attr_r:
+            case emu_mem_attr_rw:
+                emu_map_mem(sys, emu_mem_desc{emu_mem_type_boot_data,
+                    emu_mem_attr_rwx, phys_addr, 0, phys_len});
+                break;
+            case emu_mem_attr_x:
+            case emu_mem_attr_wx:
+            case emu_mem_attr_rx:
+            case emu_mem_attr_rwx:            
+                emu_map_mem(sys, emu_mem_desc{emu_mem_type_boot_code,
+                    emu_mem_attr_rwx, phys_addr, 0, phys_len});
+                break;
+            case emu_mem_attr_none:
+            default: break;
+            }
         }
     }
 
@@ -831,7 +972,7 @@ int emu_exception(emu_cpu *cpu)
     uint insn_len = exit->VpException.InstructionByteCount;
     uint step_len = 0;
 
-    emu_debugf("emu_exception: type=%s code=%d parameter=%lld\n",
+    emu_tracef("emu_exception: type=%s code=%d parameter=%lld\n",
         x86_exception_str(exit->VpException.ExceptionType),
         exit->VpException.ErrorCode,
         exit->VpException.ExceptionParameter);
@@ -939,6 +1080,9 @@ int emu_create_sys(emu_system **sysp, ullong mem_size)
         WHvMapGpaRangeFlagRead |
         WHvMapGpaRangeFlagWrite |
         WHvMapGpaRangeFlagExecute));
+
+    emu_map_mem(sys, emu_mem_desc{emu_mem_type_main_memory,
+        emu_mem_attr_rwx, 0, 0, sys->mem_size});
 
     return 0;
 

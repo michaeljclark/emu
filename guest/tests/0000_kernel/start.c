@@ -3,6 +3,7 @@
 #include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
+#include "alloca.h"
 #include "console.h"
 #include "poweroff.h"
 #include "types.h"
@@ -14,8 +15,8 @@ extern char _memory_end;
 void setup()
 {
     register_console(&console_ns16550a);
-    register_poweroff(&poweroff_cf9);
-     _malloc_addblock(&_memory_start, &_memory_end - &_memory_start);
+    register_poweroff(&poweroff_vmm);
+    _malloc_addblock(&_memory_start, &_memory_end - &_memory_start);
 }
 
 int main(int argc, char **argv);

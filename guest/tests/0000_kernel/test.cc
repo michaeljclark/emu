@@ -22,6 +22,7 @@ int main()
     CHECK_ERROR(emu_create_device(&a20, sys, "a20", nullptr));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));
     CHECK_ERROR(emu_create_device(&uart, sys, "uart", nullptr));
+    CHECK_ERROR(emu_set_vmcall(cpu, emu_vmcall, nullptr));
     CHECK_ERROR(emu_load(sys, "build/out/x86/guest/tests/0000_kernel/system.elf"));
     while (emu_running(cpu)) emu_launch(cpu);
     CHECK_ERROR(emu_dump_regs(cpu));
