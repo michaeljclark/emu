@@ -9,17 +9,15 @@
 #include "types.h"
 #include "x86_intrin.h"
 
-extern char _memory_start;
-extern char _memory_end;
+void mem_setup();
+int main(int argc, char **argv);
 
 void setup()
 {
     register_console(&console_ns16550a);
     register_poweroff(&poweroff_vmm);
-    _malloc_addblock(&_memory_start, &_memory_end - &_memory_start);
+    mem_setup();
 }
-
-int main(int argc, char **argv);
 
 void start_c(void)
 {

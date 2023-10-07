@@ -26,15 +26,10 @@ void cpu_info(char* cpu_name)
 
 char cpu_name[64];
 
-void query_mem();
-
 int main(int argc, const char **argv)
 {
     printf("# emu kernel: version %d.%d\n", 0, 1);
     cpu_info(cpu_name);
     printf("# cpu model: %s\n", cpu_name);
-    query_mem();
-    printf("# kernel heap %llx - %llx\n",
-        (ullong)&_memory_start, (ullong)&_memory_end);
     return 0;
 }

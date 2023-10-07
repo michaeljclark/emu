@@ -20,6 +20,7 @@ clean: ; rm -fr build/out
 kern_objs = \
 	guest/kern/console.o guest/kern/uart.o \
 	guest/kern/poweroff.o guest/kern/cf9.o \
+	guest/kern/mem.o guest/kern/page.o \
 	guest/kern/vmm.o
 
 $(OBJ)/guest/kern/%.o: guest/kern/%.c
