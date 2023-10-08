@@ -15,72 +15,75 @@ BOOT=build/out/x86
 all: all_exec
 clean: ; rm -fr build/out
 
-# rules for kern and libc
+# pattern rules for common libs
 
-kern_objs = \
-	guest/kern/console.o guest/kern/uart.o \
-	guest/kern/poweroff.o guest/kern/cf9.o \
-	guest/kern/mem.o guest/kern/page.o \
-	guest/kern/vmm.o
+common_lib_dirs = common/crypto
+common_lib_objs = $(addprefix $(OBJ)/,$(patsubst %.c,%.o,$(wildcard $(1)/*.c)))
+common_lib_name = $(lastword $(subst /, ,$(1)))
+common_lib_var = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_common_libs)))
 
-$(OBJ)/guest/kern/%.o: guest/kern/%.c
-	mkdir -p $(dir $@) ; $(CC) $(GUEST_CFLAGS) -c -o $@ $^
-$(OBJ)/guest/kern.a: $(addprefix $(OBJ)/,$(kern_objs))
-	mkdir -p $(dir $@) ; $(AR) cr $@ $^
+define common_lib_rule =
+$(OBJ)/$(1)/%.o: $(1)/%.c
+	mkdir -p $$(dir $$@) ; $$(CC) $$(GUEST_CFLAGS) -c -o $$@ $$^
+$(OBJ)/common/$(2).a: $(call common_lib_objs,$(1))
+	mkdir -p $$(dir $$@) ; $$(AR) cr $$@ $$^
+endef
 
-libc_objs =	\
-	guest/libc/abort.o guest/libc/exit.o \
-	guest/libc/malloc.o guest/libc/memchr.o \
-	guest/libc/memcmp.o guest/libc/memcpy.o \
-	guest/libc/memset.o guest/libc/strchr.o \
-	guest/libc/strcmp.o guest/libc/strlen.o \
-	guest/libc/strncmp.o guest/libc/strncpy.o \
-	guest/libc/putchar.o guest/libc/puts.o \
-	guest/libc/printf.o guest/libc/vprintf.o \
-	guest/libc/vsnprintf.o
+$(foreach d,$(common_lib_dirs),$(eval $(call common_lib_rule,$(d),$(call common_lib_name,$(d)))))
 
-$(OBJ)/guest/libc/%.o: guest/libc/%.c
-	mkdir -p $(dir $@) ; $(CC) $(GUEST_CFLAGS) -c -o $@ $^
-$(OBJ)/guest/libc.a: $(addprefix $(OBJ)/,$(libc_objs))
-	mkdir -p $(dir $@) ; $(AR) cr $@ $^
+# pattern rules for guest libs
+
+guest_lib_dirs = guest/kern guest/libc
+guest_lib_objs = $(addprefix $(OBJ)/,$(patsubst %.c,%.o,$(wildcard $(1)/*.c)))
+guest_lib_name = $(lastword $(subst /, ,$(1)))
+guest_lib_var = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_guest_libs)))
+
+define guest_lib_rule =
+$(OBJ)/$(1)/%.o: $(1)/%.c
+	mkdir -p $$(dir $$@) ; $$(CC) $$(GUEST_CFLAGS) -c -o $$@ $$^
+$(OBJ)/guest/$(2).a: $(call guest_lib_objs,$(1))
+	mkdir -p $$(dir $$@) ; $$(AR) cr $$@ $$^
+endef
+
+$(foreach d,$(guest_lib_dirs),$(eval $(call guest_lib_rule,$(d),$(call guest_lib_name,$(d)))))
+
+# pattern rules for common tests
+
+common_test_root = common/tests
+common_test_makes := $(foreach dir,$(common_test_root),$(wildcard ${dir}/*/rules.mk))
+$(foreach makefile,$(common_test_makes),$(eval include $(makefile)))
+common_test_dirs := $(foreach m,$(common_test_makes),$(m:/rules.mk=))
+common_test_name = $(lastword $(subst /, ,$(1)))
+common_test_objs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_objs)))
+
+define common_test_rule =
+$(OBJ)/$(1)/%.o: $(1)/%.c
+	mkdir -p $$(dir $$@) ; $$(CC) $$(COMMON_CFLAGS) -I$(1)/include -c -o $$@ $$^
+$(BIN)/test_$(2): $(call common_test_objs,$(1),$(2)) $(call common_lib_var,common,$(2))
+	mkdir -p $$(dir $$@) ; $$(CC) $$(COMMON_CFLAGS) -o $$@ $$^
+all_exec += $(BIN)/test_$(2)
+endef
+
+$(foreach d,$(common_test_dirs),$(eval $(call common_test_rule,$(d),$(call common_test_name,$(d)))))
 
 # pattern rules for guest tests
 
-test_root = guest/tests
-test_makes := $(foreach dir,$(test_root),$(wildcard ${dir}/*/rules.mk))
-$(foreach makefile,$(test_makes),$(eval include $(makefile)))
-test_dirs := $(foreach m,$(test_makes),$(m:/rules.mk=))
-test_name = $(lastword $(subst /, ,$(1)))
-test_objs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_objs)))
-test_libs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_libs)))
+guest_test_root = guest/tests
+guest_test_makes := $(foreach dir,$(guest_test_root),$(wildcard ${dir}/*/rules.mk))
+$(foreach makefile,$(guest_test_makes),$(eval include $(makefile)))
+guest_test_dirs := $(foreach m,$(guest_test_makes),$(m:/rules.mk=))
+guest_test_name = $(lastword $(subst /, ,$(1)))
+guest_test_objs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_objs)))
 
-define test_rule =
+define guest_test_rule =
 $(OBJ)/$(1)/%.o: $(1)/%.[cS]
 	mkdir -p $$(dir $$@) ; $$(CC) $$(GUEST_CFLAGS) -I$(1)/include -c -o $$@ $$^
-$(BOOT)/$(1)/system.elf: $(call test_objs,$(1),$(2)) $(call test_libs,guest,$(2))
+$(BOOT)/$(1)/system.elf: $(call guest_test_objs,$(1),$(2)) \
+$(call guest_lib_var,guest,$(2)) $(call common_lib_var,common,$(2))
 	mkdir -p $$(dir $$@) ; $$(LD) $$(GUEST_LDFLAGS) -o $$@ $$^
 all_exec += $(BOOT)/$(1)/system.elf
 endef
 
-$(foreach d,$(test_dirs),$(eval $(call test_rule,$(d),$(call test_name,$(d)))))
-
-# pattern rules for common tests
-
-common_root = common/tests
-common_makes := $(foreach dir,$(common_root),$(wildcard ${dir}/*/rules.mk))
-$(foreach makefile,$(common_makes),$(eval include $(makefile)))
-common_dirs := $(foreach m,$(common_makes),$(m:/rules.mk=))
-common_name = $(lastword $(subst /, ,$(1)))
-common_objs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_objs)))
-
-define common_rule =
-$(OBJ)/$(1)/%.o: $(1)/%.c
-	mkdir -p $$(dir $$@) ; $$(CC) $$(COMMON_CFLAGS) -I$(1)/include -c -o $$@ $$^
-$(BIN)/$(1)/test: $(call common_objs,$(1),$(2))
-	mkdir -p $$(dir $$@) ; $$(CC) $$(COMMON_CFLAGS) -o $$@ $$^
-all_exec += $(BIN)/$(1)/test
-endef
-
-$(foreach d,$(common_dirs),$(eval $(call common_rule,$(d),$(call common_name,$(d)))))
+$(foreach d,$(guest_test_dirs),$(eval $(call guest_test_rule,$(d),$(call guest_test_name,$(d)))))
 
 all_exec: $(all_exec)
