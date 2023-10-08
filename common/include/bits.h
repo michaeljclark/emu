@@ -1,3 +1,16 @@
+/*
+ * bitmanip functions for C (generics) and C++ (template specializations)
+ *
+ * clz      -  count leading zero bits
+ * ctz       - count trailing zero bits
+ * popcnt    - bit population count
+ * ispow2    - test if power of two
+ * rupgtpow2 - round up to nearest power of two greater than
+ * rupgepow2 - round up to nearest power of two greater than or equal to
+ * rdnltpow2 - round down to nearest power of two less than
+ * rdnlepow2 - round down to nearest power of two less than or equal to
+ */
+
 #pragma once
 
 #include "types.h"
@@ -115,14 +128,26 @@ static inline uint ctz_u64(ullong v)
 static inline uint ispow2_u32(uint v) { return v && !(v & (v-1)); }
 static inline uint ispow2_u64(ullong v) { return v && !(v & (v-1)); }
 
-/* C11 generics */
+#if defined (_MSC_VER)
+#define clz_ulong clz_u32
+#define ctz_ulong ctz_u32
+#define popcnt_ulong popcnt_u32
+#define ispow2_ulong ispow2_u32
+#else
+#define clz_ulong clz_u64
+#define ctz_ulong ctz_u64
+#define popcnt_ulong popcnt_u64
+#define ispow2_ulong ispow2_u64
+#endif
+
+/* C11 generics for clz, ctz, popcnt, ispow2 */
 #if __STDC_VERSION__ >= 201112L
-#define clz(X) _Generic((X), uint: clz_u32, int: clz_u32, ullong: clz_u64, llong: clz_u64)(X)
-#define ctz(X) _Generic((X), uint: ctz_u32, int: ctz_u32, ullong: ctz_u64, llong: ctz_u64)(X)
-#define popcnt(X) _Generic((X), uint: ctz_u32, int: popcnt_u32, ullong: ctz_u64, llong: popcnt_u64)(X)
-#define ispow2(X) _Generic((X), uint: ispow2_u32, int: ispow2_u32, ullong: ispow2_u64, llong: ispow2_u64)(X)
+#define clz(X) _Generic((X), uint: clz_u32, int: clz_u32, ulong: clz_ulong, long: clz_ulong, ullong: clz_u64, llong: clz_u64)(X)
+#define ctz(X) _Generic((X), uint: ctz_u32, int: ctz_u32, ulong: ctz_ulong, long: ctz_ulong, ullong: ctz_u64, llong: ctz_u64)(X)
+#define popcnt(X) _Generic((X), uint: ctz_u32, int: popcnt_u32, ulong: ctz_ulong, long: popcnt_ulong, ullong: ctz_u64, llong: popcnt_u64)(X)
+#define ispow2(X) _Generic((X), uint: ispow2_u32, int: ispow2_u32, ulong: ispow2_ulong, long: ispow2_ulong, ullong: ispow2_u64, llong: ispow2_u64)(X)
 #elif defined __cplusplus
-/* C++ template specializations */
+/* C++ template specializations for clz, ctz, popcnt, ispow2 */
 template <typename T> uint clz(T v);
 template <typename T> uint ctz(T v);
 template <typename T> uint popcnt(T v);
@@ -143,4 +168,63 @@ template <> uint clz<ullong>(ullong v) { return clz_u64(v); }
 template <> uint ctz<ullong>(ullong v) { return ctz_u64(v); }
 template <> uint popcnt<ullong>(ullong v) { return popcnt_u64(v); }
 template <> uint ispow2<ullong>(ullong v) { return ispow2_u64(v); }
+#endif
+
+static inline uint rupgtpow2_u32(uint x) { return 1ull << (32 - clz(x-1)); }
+static inline uint rupgepow2_u32(uint x) { return 1ull << (32 - clz(x)); }
+static inline uint rdnlepow2_u32(uint x) { return 1ull << (31 - clz(x-1)); }
+static inline uint rdnltpow2_u32(uint x) { return 1ull << (31 - clz(x)); }
+static inline ullong rupgtpow2_u64(ullong x) { return 1ull << (64 - clz(x-1)); }
+static inline ullong rupgepow2_u64(ullong x) { return 1ull << (64 - clz(x)); }
+static inline ullong rdnlepow2_u64(ullong x) { return 1ull << (63 - clz(x-1)); }
+static inline ullong rdnltpow2_u64(ullong x) { return 1ull << (63 - clz(x)); }
+
+#if defined (_MSC_VER)
+#define rupgtpow2_ulong rupgtpow2_u32
+#define rupgepow2_ulong rupgepow2_u32
+#define rdnlepow2_ulong rdnlepow2_u32
+#define rdnltpow2_ulong rdnltpow2_u32
+#else
+#define rupgtpow2_ulong rupgtpow2_u64
+#define rupgepow2_ulong rupgepow2_u64
+#define rdnlepow2_ulong rdnlepow2_u64
+#define rdnltpow2_ulong rdnltpow2_u64
+#endif
+
+/* C11 generics for roundpow2 */
+#if __STDC_VERSION__ >= 201112L
+#define rupgtpow2(X) _Generic((X), uint: rupgtpow2_u32, int: rupgtpow2_u32, ulong: rupgtpow2_ulong, long: rupgtpow2_ulong, ullong: rupgtpow2_u64, llong: rupgtpow2_u64)(X)
+#define rupgepow2(X) _Generic((X), uint: rupgepow2_u32, int: rupgepow2_u32, ulong: rupgepow2_ulong, long: rupgepow2_ulong, ullong: rupgepow2_u64, llong: rupgepow2_u64)(X)
+#define rdnlepow2(X) _Generic((X), uint: rdnlepow2_u32, int: rdnlepow2_u32, ulong: rdnlepow2_ulong, long: rdnlepow2_ulong, ullong: rdnlepow2_u64, llong: rdnlepow2_u64)(X)
+#define rdnltpow2(X) _Generic((X), uint: rdnltpow2_u32, int: rdnltpow2_u32, ulong: rdnltpow2_ulong, long: rdnltpow2_ulong, ullong: rdnltpow2_u64, llong: rdnltpow2_u64)(X)
+#elif defined __cplusplus
+/* C++ template specializations for roundpow2 */
+template <typename T> T rupgtpow2(T v);
+template <typename T> T rupgepow2(T v);
+template <typename T> T rdnlepow2(T v);
+template <typename T> T rdnltpow2(T v);
+template <> int rupgtpow2<int>(int v) { return rupgtpow2_u32(v); }
+template <> int rupgepow2<int>(int v) { return rupgepow2_u32(v); }
+template <> int rdnlepow2<int>(int v) { return rdnlepow2_u32(v); }
+template <> int rdnltpow2<int>(int v) { return rdnltpow2_u32(v); }
+template <> uint rupgtpow2<uint>(uint v) { return rupgtpow2_u32(v); }
+template <> uint rupgepow2<uint>(uint v) { return rupgepow2_u32(v); }
+template <> uint rdnlepow2<uint>(uint v) { return rdnlepow2_u32(v); }
+template <> uint rdnltpow2<uint>(uint v) { return rdnltpow2_u32(v); }
+template <> long rupgtpow2<long>(long v) { return rupgtpow2_u64(v); }
+template <> long rupgepow2<long>(long v) { return rupgepow2_u64(v); }
+template <> long rdnlepow2<long>(long v) { return rdnlepow2_u64(v); }
+template <> long rdnltpow2<long>(long v) { return rdnltpow2_u64(v); }
+template <> ulong rupgtpow2<ulong>(ulong v) { return rupgtpow2_u64(v); }
+template <> ulong rupgepow2<ulong>(ulong v) { return rupgepow2_u64(v); }
+template <> ulong rdnlepow2<ulong>(ulong v) { return rdnlepow2_u64(v); }
+template <> ulong rdnltpow2<ulong>(ulong v) { return rdnltpow2_u64(v); }
+template <> llong rupgtpow2<llong>(llong v) { return rupgtpow2_u64(v); }
+template <> llong rupgepow2<llong>(llong v) { return rupgepow2_u64(v); }
+template <> llong rdnlepow2<llong>(llong v) { return rdnlepow2_u64(v); }
+template <> llong rdnltpow2<llong>(llong v) { return rdnltpow2_u64(v); }
+template <> ullong rupgtpow2<ullong>(ullong v) { return rupgtpow2_u64(v); }
+template <> ullong rupgepow2<ullong>(ullong v) { return rupgepow2_u64(v); }
+template <> ullong rdnlepow2<ullong>(ullong v) { return rdnlepow2_u64(v); }
+template <> ullong rdnltpow2<ullong>(ullong v) { return rdnltpow2_u64(v); }
 #endif
