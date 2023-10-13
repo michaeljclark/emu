@@ -112,6 +112,11 @@ static inline int hmap_default_compare_fn(void *key1, void *key2, size_t key_siz
     return memcmp(key1, key2, key_size) == 0;
 }
 
+static inline size_t hmap_bitmap_size(size_t limit)
+{
+    return (((limit + 3) >> 2) + 7) & ~7;
+}
+
 static inline size_t hmap_bitmap_idx(size_t i)
 {
     return i >> 5;
@@ -255,7 +260,7 @@ static inline void hmap_init(hmap *h,
 {
     size_t stride = key_size + val_size;
     size_t data_size = stride * limit;
-    size_t bitmap_size = (limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(limit);
     size_t total_size = data_size + bitmap_size;
 
     assert(ispow2(limit));
@@ -285,7 +290,7 @@ static inline void hmap_resize_internal(hmap *h,
 {
     size_t stride = h->key_size + h->val_size;
     size_t data_size = stride * new_limit;
-    size_t bitmap_size = (new_limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(new_limit);
     size_t total_size = data_size + bitmap_size;
 
     assert(ispow2(new_limit));
@@ -313,7 +318,7 @@ static inline void hmap_resize_internal(hmap *h,
 
 static inline void hmap_clear(hmap *h)
 {
-    size_t bitmap_size = (h->limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(h->limit);
     memset(h->bitmap, 0, bitmap_size);
     h->used = h->tombs = 0;
 }
@@ -546,7 +551,7 @@ static inline void lhmap_init(lhmap *h,
 {
     size_t stride = sizeof(lhmap_link) + key_size + val_size;
     size_t data_size = stride * limit;
-    size_t bitmap_size = (limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(limit);
     size_t total_size = data_size + bitmap_size;
 
     assert(ispow2(limit));
@@ -578,7 +583,7 @@ static inline void lhmap_resize_internal(lhmap *h,
 {
     size_t stride = sizeof(lhmap_link) + h->key_size + h->val_size;
     size_t data_size = stride * new_limit;
-    size_t bitmap_size = (new_limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(new_limit);
     size_t total_size = data_size + bitmap_size;
 
     assert(ispow2(new_limit));
@@ -619,7 +624,7 @@ static inline void lhmap_resize_internal(lhmap *h,
 
 static inline void lhmap_clear(lhmap *h)
 {
-    size_t bitmap_size = (h->limit + 3) >> 2;
+    size_t bitmap_size = hmap_bitmap_size(h->limit);
     memset(h->bitmap, 0, bitmap_size);
     h->head = h->tail = hmap_empty_offset;
     h->used = h->tombs = 0;
