@@ -4,7 +4,7 @@ ENTRY( reset )
 
 MEMORY
 {
-  bootmem (rwx) : ORIGIN = 0, LENGTH = 1048576
+  bootmem (rwx) : ORIGIN = 0, LENGTH = 65536
 }
 
 PHDRS

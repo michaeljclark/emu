@@ -54,6 +54,14 @@ typedef struct {
 #define GDT_TYPE_A       0x1 // Accessed
 
 typedef struct {
+    uint storage[2];
+} x86_64_gdt_storage;
+
+typedef struct {
+    ullong storage[2];
+} x86_64_idt_storage;
+
+typedef struct {
     uint limit_15_0  : 16;
     uint addr_15_0   : 16;
     uint addr_23_16  : 8;
@@ -67,7 +75,7 @@ typedef struct {
     uint big_dfl     : 1; /* 1 for 32-bit segments */
     uint granularity : 1; /* 1 for 4K granularity */
     uint addr_31_24  : 8;
-} x86_gdt_desc;
+} x86_64_gdt_desc;
 
 typedef struct {
     uint limit_15_0  : 16;
@@ -78,14 +86,14 @@ typedef struct {
     uint dpl         : 2;
     uint present     : 1; /* 1 */
     uint limit_19_16 : 4;
-    uint avail_sys   : 1;
-    uint reserved_1  : 1; /* 0 */
-    uint reserved_2  : 1; /* 0 */
-    uint granularity : 1;
+    uint avail_sys   : 1; /* 0 */
+    uint long_mode   : 1; /* 0 */
+    uint big_dfl     : 1; /* 0 */
+    uint granularity : 1; /* 0 */
     uint addr_31_24  : 8;
     uint addr_63_32  : 32;
     uint reserved_3  : 32;
-} x86_gdt_tss_64_desc;
+} x86_64_tss_desc;
 
 typedef struct {
     uint reserved_1[1];
@@ -102,8 +110,8 @@ typedef struct {
     uint ist7[2];
     uint reserved_3[2];
     ushort reserved_4;
-    ushort iomapbase; /* set to limit to disable */
-} x86_tss_64;
+    ushort iomapbase; /* set to limit-1 (0x67) to disable */
+} x86_64_tss;
 
 typedef struct {
     uint addr_15_0   : 16;
@@ -119,12 +127,24 @@ typedef struct {
     uint reserved_3  : 32;
 } x86_64_idt_desc;
 
-typedef struct {
-    ushort limit;
-    ushort addr[4];
-} x86_64_gdt_reg;
+#ifdef __GNUC__
+#define PACK_START
+#define PACK_END
+#define PACK_ATTR __attribute__((__packed__))
+#endif
 
-typedef struct {
+#ifdef _MSC_VER
+#define PACK_START __pragma(pack(push, 1))
+#define PACK_END __pragma(pack(pop))
+#define PACK_ATTR
+#endif
+
+PACK_START typedef struct {
     ushort limit;
-    ushort addr[4];
-} x86_64_idt_reg;
+    ullong addr;
+} PACK_ATTR x86_64_gdt_reg PACK_END;
+
+PACK_START typedef struct {
+    ushort limit;
+    ullong addr;
+} PACK_ATTR x86_64_idt_reg PACK_END;

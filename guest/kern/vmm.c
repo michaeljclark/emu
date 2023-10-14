@@ -10,6 +10,11 @@ void vmm_poweroff(llong code)
 	__builtin_unreachable();
 }
 
+int vmm_query_ncpus()
+{
+	return __vmcall(vmcall_query_ncpus);
+}
+
 int vmm_query_mem(ullong *count, emu_mem_desc *memdesc)
 {
 	return __vmcall(vmcall_query_mem, count, memdesc);

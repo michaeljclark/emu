@@ -11,6 +11,7 @@ __attribute__((noreturn)) void exit(int status);
 void* malloc(size_t size);
 void free(void* ptr);
 void _malloc_addblock(void* addr, size_t size);
+void qsort (void *, size_t, size_t, int (*)(const void *, const void *));
 
 #ifdef __cplusplus
 }

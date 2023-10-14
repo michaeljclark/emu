@@ -562,29 +562,6 @@
 #define MSR_IA32_MISC_ENABLE_xTPR           (1UL << 23U)
 #define MSR_IA32_MISC_ENABLE_XD_DISABLE     (1UL << 34U)
 
-#ifndef ASSEMBLER
-static inline bool pat_mem_type_invalid(uint64_t x)
-{
-    return ((x & ~0x7UL) != 0UL || (x & 0x6UL) == 0x2UL);
-}
-
-static inline bool is_x2apic_msr(uint32_t msr)
-{
-    /*
-     * if msr is in the range of x2APIC MSRs
-     */
-    return ((msr >= 0x800U) && (msr < 0x900U));
-}
-
-struct acrn_vcpu;
-
-void init_msr_emulation(struct acrn_vcpu *vcpu);
-uint32_t vmsr_get_guest_msr_index(uint32_t msr);
-void update_msr_bitmap_x2apic_apicv(struct acrn_vcpu *vcpu);
-void update_msr_bitmap_x2apic_passthru(struct acrn_vcpu *vcpu);
-
-#endif /* ASSEMBLER */
-
 /* 5 high-order bits in every field are reserved */
 #define PAT_FIELD_RSV_BITS          (0xF8U)
 

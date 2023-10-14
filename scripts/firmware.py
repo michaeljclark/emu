@@ -10,5 +10,5 @@ def wsldir(path):
 
 if os.name == 'nt':
 	wd = os.getcwd().replace(os.sep, '/')
-	cmd = [ "wsl", "-d", "Ubuntu", "make", "-C", wsldir(wd) ]
+	cmd = [ "wsl", "-d", "Ubuntu", "make", "-j", "$(nproc)" , "-C", wsldir(wd) ]
 	subprocess.run(cmd, check=True)

@@ -17,7 +17,7 @@ int main()
     llong mem_size = 1024 * 1024;
 
     CHECK_ERROR(emu_init());
-    CHECK_ERROR(emu_create_sys(&sys, mem_size));
+    CHECK_ERROR(emu_create_sys(&sys, mem_size, 1));
     CHECK_ERROR(emu_create_cpu(&cpu, sys, 0));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));
     CHECK_ERROR(emu_load(sys, "build/out/x86/guest/tests/0004_cpuid/system.elf"));

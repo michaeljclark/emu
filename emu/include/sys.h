@@ -96,13 +96,14 @@ struct emu_system
 {
     ullong mem_size;
     void* mem;
+    int ncpus;
     std::vector<emu_cpu*> cpulist;
     std::vector<emu_device*> devlist;
     std::vector<emu_mem_desc> memlist;
     WHV_PARTITION_HANDLE part;
 
-    emu_system(ullong mem_size) :
-        mem_size(mem_size), mem(nullptr), cpulist(), devlist(), part() {}
+    emu_system(ullong mem_size, uint ncpus) :
+        mem_size(mem_size), mem(nullptr), ncpus(ncpus), cpulist(), devlist(), part() {}
 };
 
 typedef int (*emu_vmcall_fn)(emu_cpu *cpu, void *ctx);
@@ -159,10 +160,11 @@ int emu_dump_regs(emu_cpu *cpu);
 int emu_set_vmcall(emu_cpu *cpu, emu_vmcall_fn fn, void *ctx);
 int emu_get_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values);
 int emu_set_regs(emu_cpu *cpu, uint *regs, uint count, ullong *values);
-int emu_create_sys(emu_system **sys, ullong meemu_size);
+int emu_create_sys(emu_system **sys, ullong meemu_size, int ncpus);
 int emu_create_cpu(emu_cpu **cpu, emu_system *sys, int vpi);
 int emu_halt(emu_system *sys);
 int emu_running(emu_cpu *cpu);
 int emu_launch(emu_cpu *cpu);
+int emu_lerror(emu_cpu *cpu);
 int emu_destroy_cpu(emu_cpu *cpu);
 int emu_destroy_sys(emu_system *sys);

@@ -40,7 +40,7 @@ int main()
     llong mem_size = 1024 * 1024;
 
     CHECK_ERROR(emu_init());
-    CHECK_ERROR(emu_create_sys(&sys, mem_size));
+    CHECK_ERROR(emu_create_sys(&sys, mem_size, 1));
     CHECK_ERROR(emu_create_cpu(&cpu, sys, 0));
     emu_register_device_class(&test_mmio_dev);
     CHECK_ERROR(emu_create_device(&mmio, sys, "test_mmio", nullptr));

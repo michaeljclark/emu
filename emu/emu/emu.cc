@@ -90,7 +90,7 @@ static int emu_run(int argc, char **arg)
     emu_device *a20, *rcr, *uart;
 
     CHECK_ERROR(emu_init());
-    CHECK_ERROR(emu_create_sys(&sys, (ullong)opt_mem_size << 20));
+    CHECK_ERROR(emu_create_sys(&sys, (ullong)opt_mem_size << 20, 1));
     CHECK_ERROR(emu_create_cpu(&cpu, sys, 0));
     CHECK_ERROR(emu_create_device(&a20, sys, "a20", nullptr));
     CHECK_ERROR(emu_create_device(&rcr, sys, "rcr", nullptr));

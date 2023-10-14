@@ -1,38 +1,27 @@
-#define SEG_BCODE 1  // boot code
-#define SEG_KCODE 2  // kern code
-#define SEG_KDATA 3  // kern data
+#include "x86_cpu.h"
 
 .section .init
 reset:
 .globl reset
 .code16
-  ljmpl $0x0, $start16
+  ljmpl $0x0, $bpstart16
 
-.globl start16
-.globl start32
-.globl start64
+.globl bpstart16
+.globl bpstart32
+.globl bpstart64
+.globl bpstart_c
+
+.globl gdtdesc
+.globl stack_bot
+.globl stack_top
 
 # Load GDT and switch to 32-bit protected mode
 
 .p2align 12, 0
-start16:
+bpstart16:
 .code16
   # disable interrupts
   cli
-
-  # enable Gate A20
-a20_1:
-  inb     $0x64,%al               # Wait for not busy
-  testb   $0x2,%al
-  jnz     a20_1
-  movb    $0xd1,%al               # 0xd1 -> port 0x64
-  outb    %al,$0x64
-a20_2:
-  inb     $0x64,%al               # Wait for not busy
-  testb   $0x2,%al
-  jnz     a20_2
-  movb    $0xdf,%al               # 0xdf -> port 0x60
-  outb    %al,$0x60
 
   # load GDT
   lgdt gdtdesc
@@ -43,9 +32,9 @@ a20_2:
   movl %eax, %cr0
 
   # long jmp to 32-bit protected mode reloading %cs and %eip
-  ljmp    $(SEG_BCODE<<3), $start32
+  ljmp    $(SEG_BCODE<<3), $bpstart32
 
-start32:
+bpstart32:
 .code32
 
   # enable PAE (CR4.PAE=1)
@@ -63,18 +52,21 @@ start32:
   bts $8, %eax
   wrmsr
 
-  # enable paging (CR0.PG=1)
+  # enable paging/caching (CR0.{PG=1,CD=0,NW=0,WP=1})
   mov %cr0, %eax
   bts $31, %eax
+  btc $30, %eax
+  btc $29, %eax
+  bts $16, %eax
   mov %eax, %cr0
 
   # long jmp to 64-bit long mode reloading %cs and %rip
-  ljmp    $(SEG_KCODE<<3), $start64
+  ljmp    $(SEG_KCODE<<3), $bpstart64
 
 .p2align 12, 0
 .section .text
 .code64
-start64:
+bpstart64:
   movw    $(SEG_KDATA<<3), %ax    # Our data segment
   movw    %ax, %ds                # -> DS: Data Segment
   movw    %ax, %es                # -> ES: Extra Segment
@@ -89,10 +81,10 @@ start64:
   sub %rdi, %rcx
   rep stosb
 
-  # set stack pointer and call start_c.
+  # load boot stack pointer and call bpstart_c.
   xorq    %rbp, %rbp
   movq    $stack_top, %rsp
-  call    start_c
+  call    bpstart_c
 
 spin:
   jmp     spin

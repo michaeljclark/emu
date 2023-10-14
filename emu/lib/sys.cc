@@ -286,6 +286,11 @@ void emu_copy_out(emu_system *sys, void *dst, emu_phys_addr src_pa, ullong n)
     }
 }
 
+int emu_query_ncpus(emu_system *sys)
+{
+    return sys->ncpus;
+}
+
 int emu_query_mem(emu_system *sys, ullong *count, emu_mem_desc *memdesc)
 {
     ullong incount = 0, outcount = 0;
@@ -352,6 +357,14 @@ int emu_vmcall(emu_cpu *cpu, void *ctx)
     case vmcall_poweroff:
         emu_debugf("emu_vmcall: poweroff code=%lld\n", values[1]);
         emu_halt(cpu->sys);
+        /* non zero code clears error so that emu_lerror returns 0 */
+        if (values[1] == 0) {
+            cpu->exit.ExitReason = WHvRunVpExitReasonNone;
+        }
+        break;
+    case vmcall_query_ncpus:
+        emu_debugf("emu_vmcall: query_ncpus\n");
+        result = emu_query_ncpus(cpu->sys);
         break;
     case vmcall_query_mem:
         emu_debugf("emu_vmcall: query_mem count=0x%llx memdesc=0x%llx\n",
@@ -611,8 +624,10 @@ int emu_load(emu_system *sys, const char *filename)
             memcpy((uchar*)sys->mem + phdr.p_vaddr,
                 (uchar*)addr + phdr.p_offset, phdr.p_filesz);
             //emu_dump_mem(sys, phdr.p_vaddr, phdr.p_filesz);
+        }
+        if (phdr.p_memsz > 0) {
             ullong phys_addr = phdr.p_vaddr & ~PAGE_MASK;
-            ullong phys_len = ((phdr.p_vaddr + phdr.p_filesz + PAGE_MASK)
+            ullong phys_len = ((phdr.p_vaddr + phdr.p_memsz + PAGE_MASK)
                 & ~(PAGE_MASK)) - phys_addr;
             switch (flags_attr(phdr.p_flags)) {
             case emu_mem_attr_w:
@@ -670,7 +685,7 @@ int emu_dump_regs(emu_cpu *cpu)
     CHECK_HRESULT(WHvGetVirtualProcessorRegisters(cpu->sys->part, cpu->vpi,
         all_reg_names, array_size(all_reg_names), reg_values));
 
-    emu_debugf("%16s:0x%04x", "ExitReason", cpu->exit.ExitReason);
+    emu_debugf("%04x: %10s:0x%04x", cpu->vpi, "ExitReason", cpu->exit.ExitReason);
     emu_debugf("      %s:%d", "Cpl", vpctx->ExecutionState.Cpl);
     emu_debugf("      %s:%d", "Cr0.PE", vpctx->ExecutionState.Cr0Pe);
     emu_debugf("      %s:%d", "Cr0.AM", vpctx->ExecutionState.Cr0Am);
@@ -1005,14 +1020,14 @@ error:
     return -1;
 }
 
-int emu_create_sys(emu_system **sysp, ullong mem_size)
+int emu_create_sys(emu_system **sysp, ullong mem_size, int ncpus)
 {
     WHV_PARTITION_PROPERTY prop;
     WHV_CAPABILITY cap;
     uint cap_size;
     unsigned cpuid_exit_list[64];
 
-    emu_system *sys = *sysp = new emu_system(mem_size);
+    emu_system *sys = *sysp = new emu_system(mem_size, ncpus);
 
     CHECK_HRESULT(WHvGetCapability(WHvCapabilityCodeHypervisorPresent,
         &cap, sizeof(cap), &cap_size));
@@ -1025,7 +1040,7 @@ int emu_create_sys(emu_system **sysp, ullong mem_size)
     CHECK_HRESULT(WHvCreatePartition(&sys->part));
 
     memset(&prop, 0, sizeof(prop));
-    prop.ProcessorCount = 1;
+    prop.ProcessorCount = ncpus;
 
     CHECK_HRESULT(WHvSetPartitionProperty(sys->part,
                                  WHvPartitionPropertyCodeProcessorCount,
@@ -1033,7 +1048,7 @@ int emu_create_sys(emu_system **sysp, ullong mem_size)
 
     memset(&prop, 0, sizeof(prop));
     prop.ExtendedVmExits.X64CpuidExit = 1;
-    prop.ExtendedVmExits.X64MsrExit = 1;
+    prop.ExtendedVmExits.X64MsrExit = 0;
     prop.ExtendedVmExits.ExceptionExit  = 1;
 
     CHECK_HRESULT(WHvSetPartitionProperty(sys->part,
@@ -1144,6 +1159,7 @@ int emu_halt(emu_system *sys)
 {
     for (emu_cpu *cpu : sys->cpulist) {
         cpu->running = false;
+        WHvCancelRunVirtualProcessor(sys->part, cpu->vpi, 0);
     }
     return 0;
 }
@@ -1187,6 +1203,7 @@ int emu_launch(emu_cpu *cpu)
     case WHvRunVpExitReasonX64InterruptWindow:
     case WHvRunVpExitReasonX64Halt:
     case WHvRunVpExitReasonX64ApicEoi:
+    case WHvRunVpExitReasonCanceled:
     default:
         cpu->running = false;
         break;
@@ -1196,6 +1213,17 @@ int emu_launch(emu_cpu *cpu)
 
 error:
     return -1;
+}
+
+int emu_lerror(emu_cpu *cpu)
+{
+    switch (cpu->exit.ExitReason) {
+    case WHvRunVpExitReasonNone:
+    case WHvRunVpExitReasonCanceled:
+        return 0;
+    default:
+        return 1;
+    }
 }
 
 int emu_destroy_cpu(emu_cpu *cpu)

@@ -3,9 +3,12 @@ LD=ld
 AR=ar
 
 COMMON_CFLAGS=-g -O2 -std=gnu11 -Icommon/include -Iguest/include \
+	-Ithird_party/libuv/include \
 	-m64 -mno-sse -fpie -ffunction-sections -fdata-sections \
-	-fno-omit-frame-pointer -fno-stack-protector
-GUEST_CFLAGS = $(COMMON_CFLAGS) -nostdinc
+	-fno-omit-frame-pointer -fno-stack-protector -ffreestanding
+TEST_CFLAGS = $(COMMON_CFLAGS)
+TEST_LDFLAGS = -luv
+GUEST_CFLAGS = $(COMMON_CFLAGS)
 GUEST_LDFLAGS = --nmagic --gc-sections -T guest/tests/default.lds
 
 OBJ=build/out/obj
@@ -64,10 +67,10 @@ common_test_objs = $(addprefix $(OBJ)/,$(addprefix $(1)/,$($(2)_objs)))
 
 define common_test_rule =
 $(OBJ)/$(1)/%.o: $(1)/%.c ; @mkdir -p $$(dir $$@) ;
-	$(call cmd, CC $$@, $$(CC) $$(COMMON_CFLAGS) -I$(1)/include -c -o $$@ $$^)
+	$(call cmd, CC $$@, $$(CC) $$(TEST_CFLAGS) -I$(1)/include -c -o $$@ $$^)
 $(BIN)/test_$(2): $(call common_test_objs,$(1),$(2)) \
 $(call common_lib_var,common,$(2)) ; @mkdir -p $$(dir $$@) ;
-	$(call cmd, LD $$@, $$(CC) $$(COMMON_CFLAGS) -o $$@ $$^)
+	$(call cmd, LD $$@, $$(CC) -o $$@ $$^ $$(TEST_LDFLAGS))
 all_exec += $(BIN)/test_$(2)
 endef
 
@@ -87,7 +90,7 @@ $(OBJ)/$(1)/%.o: $(1)/%.[cS] ; @mkdir -p $$(dir $$@) ;
 	$(call cmd, CC $$@, $$(CC) $$(GUEST_CFLAGS) -I$(1)/include -c -o $$@ $$^)
 $(BOOT)/$(1)/system.elf: $(call guest_test_objs,$(1),$(2)) \
 $(call guest_lib_var,guest,$(2)) $(call common_lib_var,common,$(2)) ; @mkdir -p $$(dir $$@) ;
-	$(call cmd, LD $$@, $$(LD) $$(GUEST_LDFLAGS) -o $$@ $$^)
+	$(call cmd, LD $$@, $$(LD) -o $$@ $$^ $$(GUEST_LDFLAGS))
 all_exec += $(BOOT)/$(1)/system.elf
 endef
 

@@ -12,7 +12,7 @@
 void mem_setup();
 int main(int argc, char **argv);
 
-void setup()
+void arch_setup()
 {
     register_console(&console_ns16550a);
     register_poweroff(&poweroff_vmm);
@@ -22,6 +22,6 @@ void setup()
 void start_c(void)
 {
     char *argv[] = { "emu", NULL };
-    setup();
+    arch_setup();
     exit(main(1, argv));
 }

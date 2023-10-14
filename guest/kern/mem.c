@@ -17,6 +17,7 @@ static const char *mem_type_str(uint type)
     default: return "unknown";
     }
 }
+
 static const char *mem_attr_str(uint type)
 {
     switch (type & 7) {
