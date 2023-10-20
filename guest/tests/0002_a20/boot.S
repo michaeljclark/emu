@@ -1,4 +1,4 @@
-.section .init
+.section .text
 reset:
 .globl reset
 .code16

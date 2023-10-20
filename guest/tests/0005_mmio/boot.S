@@ -2,7 +2,7 @@
 #define SEG_KCODE 2  // kern code
 #define SEG_KDATA 3  // kern data
 
-.section .init
+.section .text
 reset:
 .globl reset
 .code16
@@ -14,8 +14,7 @@ reset:
 
 # Load GDT and switch to 32-bit protected mode
 
-.section .text
-.p2align 12
+.p2align 12, 0
 start16:
 .code16
   # disable interrupts
@@ -87,7 +86,7 @@ spin:
 
 # GDT
 .data
-.p2align 12
+.p2align 12, 0
 gdt:
   .long 0x00000000, 0x00000000    # null segment
   .long 0x0000ffff, 0x00cf9e00    # boot code (32-bit)
@@ -100,17 +99,15 @@ gdtdesc:
 
 # pml4-table
 .globl pml4
-.p2align 12
+.p2align 12, 0
 pml4:
 .quad pdpt + 3
-.skip 4088
 
 # page-directory-pointer
 .globl pdpt
-.p2align 12
+.p2align 12, 0
 pdpt:
 .quad 0x00000000 + 0x83 # 1GiB page
 .quad 0x40000000 + 0x83 # 1GiB page
 .quad 0x80000000 + 0x83 # 1GiB page
 .quad 0xc0000000 + 0x83 # 1GiB page
-.skip 4064

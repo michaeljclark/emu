@@ -1,7 +1,7 @@
 #define SEG_BCODE 1  // boot code
 #define SEG_BDATA 2  // boot data
 
-.section .init
+.section .text
 reset:
 .globl reset
 .code16
@@ -13,8 +13,7 @@ reset:
 
 # Load GDT and switch to 32-bit protected mode
 
-.section .text
-.p2align 12
+.p2align 12, 0
 start16:
 .code16
   # disable interrupts
@@ -46,7 +45,7 @@ spin:
 
 # GDT
 .data
-.p2align 12
+.p2align 12, 0
 gdt:
   .long 0x00000000, 0x00000000    # null segment
   .long 0x0000ffff, 0x00cf9e00    # boot code (32-bit)
