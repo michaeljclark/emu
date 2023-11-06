@@ -2,7 +2,7 @@ CC=cc
 LD=ld
 AR=ar
 
-COMMON_CFLAGS=-g -O2 -std=gnu11 -Icommon/include -Iguest/include \
+COMMON_CFLAGS=-g -Os -std=gnu11 -Icommon/include -Iguest/include \
 	-Ithird_party/libuv/include \
 	-m64 -mno-sse -fpie -ffunction-sections -fdata-sections \
 	-fno-omit-frame-pointer -fno-stack-protector -ffreestanding

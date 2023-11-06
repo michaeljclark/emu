@@ -13,8 +13,8 @@ typedef struct
 
 page_pool pages;
 
-inline ullong bitmap_pages() { return 1 + pages.npages / (PAGE_SIZE << 3); }
-inline ullong bitmap_size() { return bitmap_pages() * (PAGE_SIZE << 3); }
+static inline ullong bitmap_pages() { return 1 + pages.npages / (PAGE_SIZE << 3); }
+static inline ullong bitmap_size() { return bitmap_pages() * (PAGE_SIZE << 3); }
 
 void init_pages(ullong start, ullong end)
 {
