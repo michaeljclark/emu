@@ -27,8 +27,8 @@ static inline uint clz_u32(uint val) { return val == 0 ? 32 : __builtin_clz(val)
 static inline uint clz_u64(ullong val) { return val == 0 ? 64 : __builtin_clzll(val); }
 static inline uint ctz_u32(uint val) { return val == 0 ? 32 : __builtin_ctz(val); }
 static inline uint ctz_u64(ullong val) { return val == 0 ? 64 : __builtin_ctzll(val); }
-static inline uint popcnt_u32(uint val) { return val == 0 ? 32 : __builtin_popcount(val); }
-static inline uint popcnt_u64(ullong val) { return val == 0 ? 64 : __builtin_popcountll(val); }
+static inline uint popcnt_u32(uint val) { return __builtin_popcount(val); }
+static inline uint popcnt_u64(ullong val) { return __builtin_popcountll(val); }
 #define _bits_defined (_clz_defined | _ctz_defined | _popcnt_defined)
 #elif defined (_MSC_VER) && defined (_M_X64)
 static inline uint clz_u32(uint val) { return (int)_lzcnt_u32(val); }
@@ -144,7 +144,7 @@ static inline uint ispow2_u64(ullong v) { return v && !(v & (v-1)); }
 #if __STDC_VERSION__ >= 201112L
 #define clz(X) _Generic((X), uint: clz_u32, int: clz_u32, ulong: clz_ulong, long: clz_ulong, ullong: clz_u64, llong: clz_u64)(X)
 #define ctz(X) _Generic((X), uint: ctz_u32, int: ctz_u32, ulong: ctz_ulong, long: ctz_ulong, ullong: ctz_u64, llong: ctz_u64)(X)
-#define popcnt(X) _Generic((X), uint: ctz_u32, int: popcnt_u32, ulong: ctz_ulong, long: popcnt_ulong, ullong: ctz_u64, llong: popcnt_u64)(X)
+#define popcnt(X) _Generic((X), uint: popcnt_u32, int: popcnt_u32, ulong: popcnt_ulong, long: popcnt_ulong, ullong: popcnt_u64, llong: popcnt_u64)(X)
 #define ispow2(X) _Generic((X), uint: ispow2_u32, int: ispow2_u32, ulong: ispow2_ulong, long: ispow2_ulong, ullong: ispow2_u64, llong: ispow2_u64)(X)
 #elif defined __cplusplus
 /* C++ template specializations for clz, ctz, popcnt, ispow2 */
