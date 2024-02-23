@@ -28,6 +28,9 @@
 typedef struct hmap hmap;
 typedef struct hmap_iter hmap_iter;
 
+typedef size_t (*hmap_hash_fn)(hmap *h, void *key);
+typedef int (*hmap_compare_fn)(hmap *h, void *key1, void *key2);
+
 struct hmap_iter { hmap *h; size_t idx; };
 
 static inline size_t hmap_stride(hmap *h);
@@ -38,11 +41,16 @@ static inline int hmap_iter_eq(hmap_iter iter1, hmap_iter iter2);
 static inline int hmap_iter_neq(hmap_iter iter1, hmap_iter iter2);
 static inline hmap_iter hmap_iter_begin(hmap *h);
 static inline hmap_iter hmap_iter_end(hmap *h);
+static inline void* hmap_userdata(hmap *h);
 static inline size_t hmap_size(hmap *h);
+static inline size_t hmap_count(hmap *h);
 static inline size_t hmap_capacity(hmap *h);
 static inline size_t hmap_load(hmap *h);
 static inline void hmap_init(hmap *h,
     size_t key_size, size_t val_size, size_t limit);
+static inline void hmap_init_ex(hmap *h, void *userdata,
+    size_t key_size, size_t val_size, size_t limit,
+    hmap_hash_fn hasher, hmap_compare_fn compare);
 static inline void hmap_destroy(hmap *h);
 static inline void hmap_clear(hmap *h);
 static inline hmap_iter hmap_insert(hmap *h, void *key, void *val);
@@ -57,6 +65,9 @@ static inline void hmap_erase(hmap *h, void *key);
 typedef struct lhmap lhmap;
 typedef struct lhmap_iter lhmap_iter;
 
+typedef size_t (*lhmap_hash_fn)(lhmap *h, void *key);
+typedef int (*lhmap_compare_fn)(lhmap *h, void *key1, void *key2);
+
 struct lhmap_iter { lhmap *h; size_t idx; };
 
 static inline size_t lhmap_stride(lhmap *h);
@@ -67,11 +78,16 @@ static inline int lhmap_iter_eq(lhmap_iter iter1, lhmap_iter iter2);
 static inline int lhmap_iter_neq(lhmap_iter iter1, lhmap_iter iter2);
 static inline lhmap_iter lhmap_iter_begin(lhmap *h);
 static inline lhmap_iter lhmap_iter_end(lhmap *h);
+static inline void* lhmap_userdata(lhmap *h);
 static inline size_t lhmap_size(lhmap *h);
+static inline size_t lhmap_count(lhmap *h);
 static inline size_t lhmap_capacity(lhmap *h);
 static inline size_t lhmap_load(lhmap *h);
 static inline void lhmap_init(lhmap *h,
     size_t key_size, size_t val_size, size_t limit);
+static inline void lhmap_init_ex(lhmap *h, void *userdata,
+    size_t key_size, size_t val_size, size_t limit,
+    lhmap_hash_fn hasher, lhmap_compare_fn compare);
 static inline void lhmap_destroy(lhmap *h);
 static inline void lhmap_clear(lhmap *h);
 static inline lhmap_iter lhmap_insert(lhmap *h,
@@ -97,21 +113,6 @@ static const size_t hmap_load_factor =     (2<<15); /* 0.5 */
 static const size_t hmap_load_multiplier = (2<<16); /* 1.0 */
 static const size_t hmap_empty_offset = (size_t)-1LL;
 
-typedef size_t (*hmap_hash_fn)(void *key, size_t key_size);
-typedef int (*hmap_compare_fn)(void *key1, void *key2, size_t key_size);
-
-static inline size_t hmap_default_hash_fn(void *key, size_t key_size)
-{
-    size_t k = 0;
-    memcpy(&k, key, key_size < sizeof(k) ? key_size : sizeof(k));
-    return k;
-}
-
-static inline int hmap_default_compare_fn(void *key1, void *key2, size_t key_size)
-{
-    return memcmp(key1, key2, key_size) == 0;
-}
-
 static inline size_t hmap_bitmap_size(size_t limit)
 {
     return (((limit + 3) >> 2) + 7) & ~7;
@@ -132,15 +133,17 @@ static inline hmap_bitmap_state hmap_bitmap_get(uint64_t *bitmap, size_t i)
     return (hmap_bitmap_state)((bitmap[hmap_bitmap_idx(i)] >> hmap_bitmap_shift(i)) & 3);
 }
 
-static inline void hmap_bitmap_set(uint64_t *bitmap, size_t i, ullong value)
+static inline void hmap_bitmap_set(uint64_t *bitmap, size_t i, uint64_t value)
 {
     bitmap[hmap_bitmap_idx(i)] |= (value << hmap_bitmap_shift(i));
 }
 
-static inline void hmap_bitmap_clear(uint64_t *bitmap, size_t i, ullong value)
+static inline void hmap_bitmap_clear(uint64_t *bitmap, size_t i, uint64_t value)
 {
     bitmap[hmap_bitmap_idx(i)] &= ~(value << hmap_bitmap_shift(i));
 }
+
+static inline int hmap_ispow2(size_t v) { return v && !(v & (v-1)); }
 
 /*
  * hmap hash table implementation
@@ -155,9 +158,22 @@ struct hmap
     size_t limit;
     hmap_hash_fn hasher;
     hmap_compare_fn compare;
-    uchar *data;
+    unsigned char *data;
     uint64_t *bitmap;
+    void *userdata;
 };
+
+static inline size_t hmap_default_hash_fn(hmap *h, void *key)
+{
+    size_t k = 0;
+    memcpy(&k, key, h->key_size < sizeof(k) ? h->key_size : sizeof(k));
+    return k;
+}
+
+static inline int hmap_default_compare_fn(hmap *h, void *key1, void *key2)
+{
+    return memcmp(key1, key2, h->key_size) == 0;
+}
 
 static inline size_t hmap_stride(hmap *h)
 {
@@ -225,7 +241,17 @@ static inline hmap_iter hmap_iter_end(hmap *h)
     return hmap_iter_make(h, h->limit);
 }
 
+static inline void* hmap_userdata(hmap *h)
+{
+    return h->userdata;
+}
+
 static inline size_t hmap_size(hmap *h)
+{
+    return h->used * (h->key_size + h->val_size);
+}
+
+static inline size_t hmap_count(hmap *h)
 {
     return h->used;
 }
@@ -252,30 +278,39 @@ static inline size_t hmap_hash_index(hmap *h, size_t i)
 
 static inline size_t hmap_key_index(hmap *h, void *key)
 {
-    return hmap_hash_index(h, h->hasher(key, h->key_size));
+    return hmap_hash_index(h, h->hasher(h, key));
 }
 
-static inline void hmap_init(hmap *h,
-    size_t key_size, size_t val_size, size_t limit)
+static inline void hmap_init_ex(hmap *h, void *userdata,
+    size_t key_size, size_t val_size, size_t limit,
+    hmap_hash_fn hasher, hmap_compare_fn compare)
 {
     size_t stride = key_size + val_size;
     size_t data_size = stride * limit;
     size_t bitmap_size = hmap_bitmap_size(limit);
     size_t total_size = data_size + bitmap_size;
 
-    assert(ispow2(limit));
+    assert(hmap_ispow2(limit));
 
     h->key_size = key_size;
     h->val_size = val_size;
     h->used = 0;
     h->tombs = 0;
     h->limit = limit;
-    h->hasher = hmap_default_hash_fn;
-    h->compare = hmap_default_compare_fn;
-    h->data = (uchar*)malloc(total_size);
+    h->hasher = hasher;
+    h->compare = compare;
+    h->data = (unsigned char*)malloc(total_size);
     h->bitmap = (uint64_t*)(h->data + data_size);
+    h->userdata = userdata;
 
     memset(h->data, 0, total_size);
+}
+
+static inline void hmap_init(hmap *h,
+    size_t key_size, size_t val_size, size_t limit)
+{
+    hmap_init_ex(h, NULL, key_size, val_size, limit,
+        hmap_default_hash_fn, hmap_default_compare_fn);
 }
 
 static inline void hmap_destroy(hmap *h)
@@ -286,22 +321,22 @@ static inline void hmap_destroy(hmap *h)
 }
 
 static inline void hmap_resize_internal(hmap *h,
-    uchar *old_data, uint64_t *old_bitmap, size_t old_limit, size_t new_limit)
+    unsigned char *old_data, uint64_t *old_bitmap, size_t old_limit, size_t new_limit)
 {
     size_t stride = h->key_size + h->val_size;
     size_t data_size = stride * new_limit;
     size_t bitmap_size = hmap_bitmap_size(new_limit);
     size_t total_size = data_size + bitmap_size;
 
-    assert(ispow2(new_limit));
+    assert(hmap_ispow2(new_limit));
 
-    h->data = (uchar*)malloc(total_size);
+    h->data = (unsigned char*)malloc(total_size);
     h->bitmap = (uint64_t*)((char*)h->data + data_size);
     h->limit = new_limit;
     memset(h->bitmap, 0, bitmap_size);
 
     size_t i = 0;
-    for (uchar *k = old_data; k != old_data + old_limit * stride; k += stride, i++) {
+    for (unsigned char *k = old_data; k != old_data + old_limit * stride; k += stride, i++) {
         if ((hmap_bitmap_get(old_bitmap, i) & hmap_occupied) != hmap_occupied) continue;
         for (size_t j = hmap_key_index(h, k); ; j = (j+1) & hmap_index_mask(h)) {
             if ((hmap_bitmap_get(h->bitmap, j) & hmap_occupied) != hmap_occupied) {
@@ -339,7 +374,7 @@ static inline hmap_iter hmap_insert(hmap *h, void *key, void *val)
                     hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
                          if (state == hmap_available) abort();
                     else if (state == hmap_deleted); /* skip */
-                    else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+                    else if (h->compare(h, hmap_data_key(h, i), key)) {
                         hmap_iter iter = { h, i };
                         return iter;
                     }
@@ -348,7 +383,7 @@ static inline hmap_iter hmap_insert(hmap *h, void *key, void *val)
                 hmap_iter iter = { h, i };
                 return iter;
             }
-        } else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+        } else if (h->compare(h, hmap_data_key(h, i), key)) {
             memcpy(hmap_data_val(h, i), val, h->val_size);
             hmap_iter iter = { h, i };
             return iter;
@@ -373,13 +408,13 @@ static inline void* hmap_get(hmap *h, void *key)
                     hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
                          if (state == hmap_available) abort();
                     else if (state == hmap_deleted); /* skip */
-                    else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+                    else if (h->compare(h, hmap_data_key(h, i), key)) {
                         return hmap_data_val(h, i);
                     }
                 }
             }
             return hmap_data_val(h, i);
-        } else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+        } else if (h->compare(h, hmap_data_key(h, i), key)) {
             return hmap_data_val(h, i);
         }
     }
@@ -391,7 +426,7 @@ static inline hmap_iter hmap_find(hmap *h, void *key)
         hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
              if (state == hmap_available)           /* notfound */ break;
         else if (state == hmap_deleted);            /* skip */
-        else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+        else if (h->compare(h, hmap_data_key(h, i), key)) {
             return hmap_iter_make(h, i);
         }
     }
@@ -404,7 +439,7 @@ static inline void hmap_erase(hmap *h, void *key)
         hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
              if (state == hmap_available)           /* notfound */ break;
         else if (state == hmap_deleted);            /* skip */
-        else if (h->compare(hmap_data_key(h, i), key, h->key_size)) {
+        else if (h->compare(h, hmap_data_key(h, i), key)) {
             hmap_bitmap_set(h->bitmap, i, hmap_deleted);
             hmap_bitmap_clear(h->bitmap, i, hmap_occupied);
             h->used--;
@@ -425,12 +460,13 @@ struct lhmap
     size_t used;
     size_t tombs;
     size_t limit;
-    hmap_hash_fn hasher;
-    hmap_compare_fn compare;
-    uchar *data;
+    lhmap_hash_fn hasher;
+    lhmap_compare_fn compare;
+    unsigned char *data;
     uint64_t *bitmap;
     size_t head;
     size_t tail;
+    void *userdata;
 };
 
 typedef struct lhmap_link lhmap_link;
@@ -441,17 +477,29 @@ struct lhmap_link
     size_t next;
 };
 
+static inline size_t lhmap_default_hash_fn(lhmap *h, void *key)
+{
+    size_t k = 0;
+    memcpy(&k, key, h->key_size < sizeof(k) ? h->key_size : sizeof(k));
+    return k;
+}
+
+static inline int lhmap_default_compare_fn(lhmap *h, void *key1, void *key2)
+{
+    return memcmp(key1, key2, h->key_size) == 0;
+}
+
 static inline size_t lhmap_stride(lhmap *h)
 {
     return sizeof(lhmap_link) + h->key_size + h->val_size;
 }
 
-static inline lhmap_link* lhmap_old_data_link(lhmap *h, uchar *old_data, size_t idx)
+static inline lhmap_link* lhmap_old_data_link(lhmap *h, unsigned char *old_data, size_t idx)
 {
     return (lhmap_link*)(old_data + idx * lhmap_stride(h));
 }
 
-static inline void* lhmap_old_data_key(lhmap *h, uchar *old_data, size_t idx)
+static inline void* lhmap_old_data_key(lhmap *h, unsigned char *old_data, size_t idx)
 {
     return old_data + sizeof(lhmap_link) + idx * lhmap_stride(h);
 }
@@ -516,7 +564,17 @@ static inline lhmap_iter lhmap_iter_end(lhmap *h)
     return lhmap_iter_make(h, hmap_empty_offset);
 }
 
+static inline void* lhmap_userdata(lhmap *h)
+{
+    return h->userdata;
+}
+
 static inline size_t lhmap_size(lhmap *h)
+{
+    return h->used * (sizeof(lhmap_link) + h->key_size + h->val_size);
+}
+
+static inline size_t lhmap_count(lhmap *h)
 {
     return h->used;
 }
@@ -543,32 +601,41 @@ static inline size_t lhmap_hash_index(lhmap *h, size_t i)
 
 static inline size_t lhmap_key_index(lhmap *h, void *key)
 {
-    return lhmap_hash_index(h, h->hasher(key, h->key_size));
+    return lhmap_hash_index(h, h->hasher(h, key));
 }
 
-static inline void lhmap_init(lhmap *h,
-    size_t key_size, size_t val_size, size_t limit)
+static inline void lhmap_init_ex(lhmap *h, void *userdata,
+    size_t key_size, size_t val_size, size_t limit,
+    lhmap_hash_fn hasher, lhmap_compare_fn compare)
 {
     size_t stride = sizeof(lhmap_link) + key_size + val_size;
     size_t data_size = stride * limit;
     size_t bitmap_size = hmap_bitmap_size(limit);
     size_t total_size = data_size + bitmap_size;
 
-    assert(ispow2(limit));
+    assert(hmap_ispow2(limit));
 
     h->key_size = key_size;
     h->val_size = val_size;
     h->used = 0;
     h->tombs = 0;
     h->limit = limit;
-    h->hasher = hmap_default_hash_fn;
-    h->compare = hmap_default_compare_fn;
-    h->data = (uchar*)malloc(total_size);
+    h->hasher = hasher;
+    h->compare = compare;
+    h->data = (unsigned char*)malloc(total_size);
     h->bitmap = (uint64_t*)(h->data + data_size);
     h->head = hmap_empty_offset;
     h->tail = hmap_empty_offset;
+    h->userdata = userdata;
 
     memset(h->data, 0, total_size);
+}
+
+static inline void lhmap_init(lhmap *h,
+    size_t key_size, size_t val_size, size_t limit)
+{
+    lhmap_init_ex(h, NULL, key_size, val_size, limit,
+        lhmap_default_hash_fn, lhmap_default_compare_fn);
 }
 
 static inline void lhmap_destroy(lhmap *h)
@@ -579,16 +646,16 @@ static inline void lhmap_destroy(lhmap *h)
 }
 
 static inline void lhmap_resize_internal(lhmap *h,
-    uchar *old_data, uint64_t *old_bitmap, size_t old_limit, size_t new_limit)
+    unsigned char *old_data, uint64_t *old_bitmap, size_t old_limit, size_t new_limit)
 {
     size_t stride = sizeof(lhmap_link) + h->key_size + h->val_size;
     size_t data_size = stride * new_limit;
     size_t bitmap_size = hmap_bitmap_size(new_limit);
     size_t total_size = data_size + bitmap_size;
 
-    assert(ispow2(new_limit));
+    assert(hmap_ispow2(new_limit));
 
-    h->data = (uchar*)malloc(total_size);
+    h->data = (unsigned char*)malloc(total_size);
     h->bitmap = (uint64_t*)((char*)h->data + data_size);
     h->limit = new_limit;
     memset(h->bitmap, 0, bitmap_size);
@@ -691,14 +758,14 @@ static inline lhmap_iter lhmap_insert(lhmap *h,
                     hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
                          if (state == hmap_available) abort();
                     else if (state == hmap_deleted); /* skip */
-                    else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+                    else if (h->compare(h, lhmap_data_key(h, i), key)) {
                         return lhmap_iter_make(h, i);
                     }
                 }
             } else {
                 return lhmap_iter_make(h, i);
             }
-        } else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+        } else if (h->compare(h, lhmap_data_key(h, i), key)) {
             memcpy(lhmap_data_val(h, i), val, h->val_size);
             return lhmap_iter_make(h, i);
         }
@@ -721,13 +788,13 @@ static inline void* lhmap_get(lhmap *h, void *key)
                     hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
                          if (state == hmap_available) abort();
                     else if (state == hmap_deleted); /* skip */
-                    else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+                    else if (h->compare(h, lhmap_data_key(h, i), key)) {
                         return lhmap_data_val(h, i);
                     }
                 }
             }
             return lhmap_data_val(h, i);
-        } else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+        } else if (h->compare(h, lhmap_data_key(h, i), key)) {
             return lhmap_data_val(h, i);
         }
     }
@@ -739,7 +806,7 @@ static inline lhmap_iter lhmap_find(lhmap *h, void *key)
         hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
              if (state == hmap_available)           /* notfound */ break;
         else if (state == hmap_deleted);            /* skip */
-        else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+        else if (h->compare(h, lhmap_data_key(h, i), key)) {
             return lhmap_iter_make(h, i);
         }
     }
@@ -752,7 +819,7 @@ static inline void lhmap_erase(lhmap *h, void *key)
         hmap_bitmap_state state = hmap_bitmap_get(h->bitmap, i);
              if (state == hmap_available)           /* notfound */ break;
         else if (state == hmap_deleted);            /* skip */
-        else if (h->compare(lhmap_data_key(h, i), key, h->key_size)) {
+        else if (h->compare(h, lhmap_data_key(h, i), key)) {
             hmap_bitmap_set(h->bitmap, i, hmap_deleted);
             hmap_bitmap_clear(h->bitmap, i, hmap_occupied);
             lhmap_erase_link_internal(h, i);
