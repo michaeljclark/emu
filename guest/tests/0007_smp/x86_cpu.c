@@ -5,6 +5,7 @@
 #include "stack.h"
 #include "x86_intrin.h"
 #include "x86_mmu.h"
+#include "x86_msr.h"
 #include "x86_cpu.h"
 
 int ncpus;
@@ -96,11 +97,24 @@ static void x86_cpu_info(x86_cpu *cpu)
     }
 }
 
+void x86_alloc_xsave(int cpu)
+{
+    /* Get XSAVE area size */
+    int leaf[4];
+    x86_cpuid(leaf, 0xd, 0);
+    uint xsave_size = leaf[1] /* ebx */;
+
+    /* Allocate XSAVE area */
+    cpulist[cpu].xsave = aligned_alloc(64, xsave_size);
+}
+
 void x86_cpu_init(int cpu)
 {
     cpulist[cpu].init_tsc = x86_rdtsc();
     x86_64_lgdt(cpulist[cpu].gdt, sizeof(x86_64_gdt_storage) * GDT_COUNT);
     x86_64_lidt(cpulist[cpu].idt, sizeof(x86_64_idt_storage) * IDT_COUNT);
     x86_ltr(SEG_TSS << 3);
+    x86_wrmsr(MSR_IA32_GS_BASE, (ullong)(cpulist + cpu));
+    x86_alloc_xsave(cpu);
     x86_cpu_info(cpulist + cpu);
 }

@@ -78,9 +78,52 @@ static inline void x86_64_lidt(void *idt, int size)
     asm volatile ("lidt (%0)" : : "r" (&idtreg));
 }
 
+static inline void x86_64_xsave(void *addr, ullong mask)
+{
+    uint low = (uint)mask, high = (uint)(mask >> 32);
+    asm volatile ("xsave64 0(%0)" : : "r" (addr), "a" (low), "d" (high));
+}
+
+static inline void x86_64_xrstor(void *addr, ullong mask)
+{
+    uint low = (uint)mask, high = (uint)(mask >> 32);
+    asm volatile ("xrstor64 0(%0)" : : "r" (addr), "a" (low), "d" (high));
+}
+
+static inline void x86_wrfsbase(void* addr)
+{
+    asm volatile ("wrfsbase %0" : : "r" (addr));
+}
+
+static inline void x86_wrgsbase(void* addr)
+{
+    asm volatile ("wrgsbase %0" : : "r" (addr));
+}
+
+static inline void* x86_rdfsbase()
+{
+    void* addr;
+    asm volatile ("rdfsbase %0" : "=r" (addr));
+    return addr;
+}
+
+static inline void* x86_rdgsbase()
+{
+    void* addr;
+    asm volatile ("rdgsbase %0" : "=r" (addr));
+    return addr;
+}
+
 static inline void x86_ltr(ushort sel)
 {
     asm volatile ("ltr %0" : : "r" (sel));
+}
+
+static inline uintp x86_read_cr0()
+{
+    uintp val;
+    asm volatile ("mov %%cr0,%0" : "=r" (val));
+    return val;
 }
 
 static inline uintp x86_read_cr2()
@@ -97,9 +140,44 @@ static inline uintp x86_read_cr3()
     return val;
 }
 
+static inline uintp x86_read_cr4()
+{
+    uintp val;
+    asm volatile ("mov %%cr4,%0" : "=r" (val));
+    return val;
+}
+
+static inline ullong x86_read_xcr(uint xcr)
+{
+    uint low, high;
+    asm volatile ("xgetbv" : "=a" (low), "=d" (high) : "c" (xcr));
+    return (ullong)low | ((ullong)high << 32);
+}
+
+static inline void x86_write_cr0(uintp val)
+{
+    asm volatile ("mov %0,%%cr0" : : "r" (val));
+}
+
+static inline void x86_write_cr2(uintp val)
+{
+    asm volatile ("mov %0,%%cr2" : : "r" (val));
+}
+
 static inline void x86_write_cr3(uintp val)
 {
     asm volatile ("mov %0,%%cr3" : : "r" (val));
+}
+
+static inline void x86_write_cr4(uintp val)
+{
+    asm volatile ("mov %0,%%cr4" : : "r" (val));
+}
+
+static inline void x86_write_xcr(uint xcr, ullong val)
+{
+    uint low = (uint)val, high = (uint)(val>>32);
+    asm volatile ("xsetbv" : : "a" (low), "d" (high), "c" (xcr));
 }
 
 static inline void x86_cli()

@@ -37,21 +37,28 @@ static const char *exception_names[22] = {
     [x86_exception_cet_exception]  = "cet_exception"
 };
 
+#define x86_percpu_int(field) ({ \
+    int val; \
+    asm volatile ("movl %%gs:(%c1), %0": "=r" (val) : "i" (offsetof(struct x86_cpu, field))); \
+    val; \
+})
+
 void trap(trapframe *tf)
 {
     ullong tsc_delta = x86_rdtsc() - cpulist[0].init_tsc;
+    int cpu = x86_percpu_int(cpu);
     if (tf->trapno == IRQ_DELTA + IRQ_TIMER) {
         x86_lapic_eoi(x86_lapic_base());
         spinlock_lock(&trap_lock);
-        printf("trap: timer tscdelta=%llx trapno=%lld tf=%p tf->rip=%llx\n",
-            tsc_delta, tf->trapno, tf, tf->rip);
+        printf("cpu=%d: trap=timer tscdelta=%llx trapno=%lld tf=%p tf->rip=%llx\n",
+            cpu, tsc_delta, tf->trapno, tf, tf->rip);
         spinlock_unlock(&trap_lock);
     } else {
         const char* trap_name = tf->trapno < array_size(exception_names) ?
             exception_names[tf->trapno] : "unhandled";
         spinlock_lock(&trap_lock);
-        printf("trap: %s tscdelta=%llx trapno=%lld tf=%p tf->rip=%llx\n",
-            trap_name, tsc_delta, tf->trapno, tf, tf->rip);
+        printf("cpu=%d: trap=%s tscdelta=%llx trapno=%lld tf=%p tf->rip=%llx\n",
+            cpu, trap_name, tsc_delta, tf->trapno, tf, tf->rip);
         spinlock_unlock(&trap_lock);
         poweroff_halt(1);
     }

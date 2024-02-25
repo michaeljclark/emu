@@ -1,3 +1,5 @@
+#include "x86_flags.h"
+
 .globl trap
 .globl trapentry
 
@@ -18,9 +20,19 @@ trapentry:
     push %rbx
     push %rax
 
+    xor %edx, %edx
+    movl $(X86_XCR_X87 | X86_XCR_SSE | X86_XCR_AVX), %eax
+    movq %gs:(16), %rcx
+    xsave64 0(%rcx)
+
     # %rdi (argo) points to trapframe
     mov %rsp, %rdi
     call trap
+
+    xor %edx, %edx
+    movl $(X86_XCR_X87 | X86_XCR_SSE | X86_XCR_AVX), %eax
+    movq %gs:(16), %rcx
+    xrstor64 0(%rcx)
 
     pop %rax
     pop %rbx

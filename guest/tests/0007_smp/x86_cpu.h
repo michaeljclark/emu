@@ -25,6 +25,7 @@ struct x86_cpu
 	int cpu;
 	int lapic_id;
 	void *kstack;
+	void *xsave;
 	x86_64_gdt_storage *gdt;
 	x86_64_idt_storage *idt;
 	x86_64_tss *tss;

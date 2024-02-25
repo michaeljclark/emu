@@ -1,6 +1,7 @@
 #include "x86_msr.h"
 #include "x86_lapic.h"
 #include "x86_cpu.h"
+#include "x86_flags.h"
 
 .globl apstart16
 .globl apstart32
@@ -91,6 +92,23 @@ apstart64:
   movw    %ax, %ss                # -> SS: Stack Segment
   movw    %ax, %fs                # -> FS: User Segment
   movw    %ax, %gs                # -> GS: Kernel Segment
+
+  # set CR0.MP, clear CR0.EM
+  mov %cr0, %rax
+  or $X86_CR0_MP, %rax
+  and $~X86_CR0_EM, %rax
+  mov %rax, %cr0
+
+  # set CR4.OSFXSR, CR4.OSXMMEXCPT, CR4.OSXSAVE
+  mov %cr4, %rax
+  or $(X86_CR4_OSFXSR|X86_CR4_OSXMMEXCPT|X86_CR4_OSXSAVE), %rax
+  mov %rax, %cr4
+
+  # set XCR.X87, XCR.SSE, XCR.AVX
+  xor %rcx, %rcx
+  xgetbv
+  or $(X86_XCR_X87|X86_XCR_SSE|X86_XCR_AVX), %rax
+  xsetbv
 
   # read local APIC base address
   mov     $MSR_IA32_APIC_BASE, %ecx
