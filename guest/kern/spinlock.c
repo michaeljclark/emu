@@ -1,5 +1,5 @@
 /*
- * Ticket Lock
+ * Queued ticket lock in C with description in English
  *
  * Ticket locks are fair spinlocks that order acccess on a first-in,
  * first-out basis. The lock is composed of a head counter and a tail
@@ -96,15 +96,14 @@ int spinlock_trylock(spinlock *l)
 
     lve = atomic_load((atomic_ullong*)&l->lockval);
 
-    s.lockval = lve;
-
-    /* fail because another trylock is in progress. */
-    if ((s.tail & 1) == 1) return 0;
-
     /* get one-way ticket by incrementing tail by one to notify
      * next lock or unlock request to return our ticket. */
     do {
         s.lockval = lve;
+
+        /* fail because another trylock is in progress. */
+        if ((s.tail & 1) == 1) return 0;
+
         ticket = s.tail;
         s.tail = s.tail + 1;
         lvd = s.lockval;
