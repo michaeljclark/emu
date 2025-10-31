@@ -5,8 +5,9 @@
  * first-out basis. The lock is composed of a head counter and a tail
  * counter. The head counter indicates the ticket number of the next
  * lock owner. The tail counter indicates the next issued ticket number.
+ *
  * To acquire the lock, the acquiring thread atomically fetches and
- * increments the tail counter to assign itself a ticket number and set
+ * increments the tail counter to assign itself a ticket number and sets
  * the value of the next available ticket number. It then waits until
  * its assigned ticket number is seen in the head counter. If the lock
  * is not contended, then head will equal the ticket number just assigned.
@@ -15,17 +16,17 @@
  *
  * The head value is biased so that the lock can be zero initialized.
  *
- * To support a lock-free trylock, lock and unlock round and incremented
+ * To support a lock-free trylock, lock and unlock round and increment
  * tail by two and trylock increments tail by one, so that it can get a
- * ticket number unconditionally and notify to the next trylock or locker
+ * ticket number unconditionally and notify the next trylock or locker
  * that a lock was taken or attempted to be taken via trylock. trylock
  * fails immediately if tail is odd, then gets the ticket number in tail
- * per usual, and increments tail by one. it now may or may no have the
- * ticket based on the current head value which it returns. it holds the
- * lock because its increment by one is rounded up by lock and unlock.
+ * per usual, and increments tail by one. it now may or may not have the
+ * lock based on the current head value which it checks. it may hold
+ * the lock because the increment by one is rounded by lock and unlock.
  *
  * Initializtion - the lock is initialized unlocked, so that the
- * next tail increment returns a ticket that will acquires the lock.
+ * next tail increment returns a ticket that will acquire the lock.
  *
  *   tail   | head
  *   -------|-------
